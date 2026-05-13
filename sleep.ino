@@ -584,15 +584,23 @@ void applyVolume(uint8_t v) {
 //  Fade engine
 // ============================================================
 void beginFade(FadeType type, unsigned long durMs, int nextTrack) {
-  fade.type     = type;
-  fade.startMs  = millis();
-  fade.durMs    = durMs;
+  // capture current interpolated volume before overwriting fade state
+  uint8_t curHwVol = VOL_MIN;
+  if (fade.type != FADE_NONE && fade.durMs > 0) {
+    unsigned long elapsed = millis() - fade.startMs;
+    float t = constrain((float)elapsed / (float)fade.durMs, 0.0f, 1.0f);
+    curHwVol = fade.fromVol + (uint8_t)((float)(fade.toVol - fade.fromVol) * t);
+  }
+
+  fade.type      = type;
+  fade.startMs   = millis();
+  fade.durMs     = durMs;
   fade.nextTrack = nextTrack;
 
   if (type == FADE_IN) {
-    fade.fromVol = VOL_MIN;
+    fade.fromVol = curHwVol;
     fade.toVol   = userVol;
-    player.setVolume(VOL_MIN, VOL_MIN);
+    player.setVolume(fade.fromVol, fade.fromVol);
   } else {
     fade.fromVol = userVol;
     fade.toVol   = VOL_MIN;
@@ -755,14 +763,25 @@ bool btnPressed(uint8_t pin, int idx) {
 void handleButtons() {
   // PLAY / STOP toggle
   if (btnPressed(BTN_PLAY_STOP, 0)) {
-    if (isPlaying) {
+    if (isPlaying && (fade.type == FADE_OUT_STOP || fade.type == FADE_OUT_SLEEP)) {
+      // cancel fade-out, fade back in
+      beginFade(FADE_IN, FADE_MS);
+      // restart timer if a preset is selected
+      if (timerPresetIdx > 0) {
+        int mins = TIMER_PRESETS[timerPresetIdx];
+        timerEndMs = millis() + (unsigned long)mins * 60000UL;
+        timerFadeStarted = false;
+        timerState = TIMER_RUNNING;
+        Serial.printf("Timer: restarted %d min\n", mins);
+      }
+    } else if (isPlaying) {
       // fade-stop
       beginFade(FADE_OUT_STOP, FADE_STOP_MS);
     } else if (trackCount > 0) {
-      // play last track
-      fade.type = FADE_NONE;
-      applyVolume(userVol);
+      // play from stopped - fade in
+      player.setVolume(VOL_MIN, VOL_MIN);
       startTrack(trackIndex);
+      beginFade(FADE_IN, FADE_MS);
       // auto-start timer if a preset is selected
       if (timerPresetIdx > 0) {
         int mins = TIMER_PRESETS[timerPresetIdx];
@@ -784,6 +803,9 @@ void handleButtons() {
     } else {
       trackIndex = next;
       prefs.putString("lastTrack", trackPaths[trackIndex]);
+      player.setVolume(VOL_MIN, VOL_MIN);
+      startTrack(trackIndex);
+      beginFade(FADE_IN, FADE_MS);
       Serial.printf("Track: %s (%d/%d)\n", trackPaths[trackIndex], trackIndex + 1, trackCount);
     }
   }
