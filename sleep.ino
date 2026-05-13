@@ -725,8 +725,16 @@ void handleLEDs() {
   int litIdx = (int)((float)remainMs / (float)totalMs * maxIdx + 0.5f);
   litIdx = constrain(litIdx, 0, maxIdx);
 
+  // blink the timer LED during any fade-out
+  bool fading = (fade.type == FADE_OUT_STOP || fade.type == FADE_OUT_SLEEP || fade.type == FADE_OUT_XFADE);
+  bool blinkOn = (millis() / 250) % 2 == 0;
+
   for (int i = 0; i < LED_COUNT; i++) {
-    digitalWrite(LED_PINS[i], i == litIdx ? HIGH : LOW);
+    if (i == litIdx) {
+      digitalWrite(LED_PINS[i], (fading ? blinkOn : HIGH));
+    } else {
+      digitalWrite(LED_PINS[i], LOW);
+    }
   }
 }
 
