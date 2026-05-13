@@ -213,8 +213,8 @@ void loop() {
     player.feedBuffer();
   }
 
-  // loop same track when it ends naturally
-  if (isPlaying && !player.playingMusic && fade.type == FADE_NONE) {
+  // loop same track when it ends naturally (also during fade-out so audio stays audible)
+  if (isPlaying && !player.playingMusic && fade.type != FADE_OUT_XFADE) {
     Serial.printf("-> loop %s\n", trackPaths[trackIndex]);
     startTrack(trackIndex);
   }
