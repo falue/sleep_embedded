@@ -19,6 +19,8 @@
 #include "sounds/New_media_downloaded.h"
 #include "sounds/No_new_media_to_download.h"
 #include "sounds/No_SD_card_found.h"
+#include "sounds/Insert.h"
+#include "sounds/Turn_it_off_and_on_again.h"
 #include "sounds/Bad_format_in_ssid_txt.h"
 #include "sounds/Reboot.h"
 #include "sounds/Update_installed.h"
@@ -29,6 +31,7 @@
 #include "sounds/Wifi_connected.h"
 #include "sounds/No_Wifi_update_skipped.h"
 #include "sounds/Looking_for_new_version.h"
+#include "sounds/No_new_version_to_download.h"
 
 // ── globals ─────────────────────────────────────────────────
 Adafruit_VS1053_FilePlayer player(
@@ -138,6 +141,8 @@ void setup() {
   if (!SD.begin(PIN_SD_CS)) {
     Serial.println("ERROR: SD card init failed");
     PLAY_SOUND(No_SD_card_found);
+    PLAY_SOUND(Insert);
+    PLAY_SOUND(Turn_it_off_and_on_again);
     errorHalt();
   }
   Serial.println("SD OK");
@@ -353,6 +358,7 @@ void checkOTA() {
   remoteHash.trim();
   if (remoteHash.isEmpty()) {
     Serial.println("OTA: empty hash");
+    PLAY_SOUND(No_new_version_to_download);
     return;
   }
 
@@ -360,12 +366,21 @@ void checkOTA() {
   Serial.printf("OTA: local=%s  remote=%s\n", localHash.c_str(), remoteHash.c_str());
   if (remoteHash == localHash) {
     Serial.println("OTA: up to date");
+    PLAY_SOUND(No_new_version_to_download);
     return;
   }
   // if both are valid version numbers, only update if remote is newer
   int cmp = compareVersions(remoteHash, localHash);
-  if (cmp == 0) { Serial.println("OTA: same version"); return; }
-  if (cmp == -1) { Serial.println("OTA: server version is older, skipping"); return; }
+  if (cmp == 0) {
+    Serial.println("OTA: same version");
+    PLAY_SOUND(No_new_version_to_download);
+    return;
+  }
+  if (cmp == -1) {
+    Serial.println("OTA: server version is older, skipping");
+    PLAY_SOUND(No_new_version_to_download);
+    return;
+  }
   // cmp == 1 (remote newer) or -99 (non-numeric, always update on difference)
 
   Serial.println("OTA: downloading firmware ...");
