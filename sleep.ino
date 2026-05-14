@@ -22,6 +22,7 @@
 #include "sounds/No_SD_card_found.h"
 #include "sounds/Insert.h"
 #include "sounds/Turn_it_off_and_on_again.h"
+#include "sounds/Error_on_playing.h"
 #include "sounds/Bad_format_in_ssid_txt.h"
 #include "sounds/Reboot.h"
 #include "sounds/Update_installed.h"
@@ -45,6 +46,7 @@ char trackPaths[MAX_TRACKS][64];
 int  trackIndex     = 0;
 int  trackCount     = 0;
 bool isPlaying      = false;
+int  playErrorCount = 0;       // consecutive startTrack failures
 uint8_t userVol     = VOL_DEFAULT;  // user-set volume (only changed by buttons/boot)
 
 // fade state
@@ -129,7 +131,7 @@ void setup() {
   // ── VS1053 ───────────────────────────────────────────────
   if (!player.begin()) {
     Serial.println("ERROR: VS1053 not found");
-    while (1) delay(1000);
+    errorHalt();
   }
   Serial.println("VS1053 OK");
 
@@ -566,8 +568,20 @@ void startTrack(int idx) {
   if (!player.startPlayingFile(trackPaths[idx])) {
     Serial.printf("ERROR: could not play %s\n", trackPaths[idx]);
     isPlaying = false;
+    playErrorCount++;
+    if (!SD.exists("/") || playErrorCount >= trackCount) {
+      Serial.println("ERROR: Lots of consecutive failures or SD card removed?");
+      PLAY_SOUND(Error_on_playing);
+      PLAY_SOUND(Insert);
+      PLAY_SOUND(Turn_it_off_and_on_again);
+      errorHalt();
+    }
+    // skip to next track
+    int next = (idx + 1) % trackCount;
+    if (next != idx) startTrack(next);
     return;
   }
+  playErrorCount = 0;  // reset on success
   isPlaying  = true;
   trackIndex = idx;
   prefs.putString("lastTrack", trackPaths[idx]);
