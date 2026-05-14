@@ -147,7 +147,7 @@ void setup() {
   // ── WiFi/OTA/download: only if PLAY button held at boot ───
   if (digitalRead(BTN_PLAY_STOP) == LOW) {
     Serial.println("PLAY held - entering update mode ...");
-    PLAY_SOUND(Looking_for_updates);
+    PLAY_SOUND(Looking_for_updates__);
     // wait for button release
     while (digitalRead(BTN_PLAY_STOP) == LOW) delay(10);
     flashAllLEDs(1);
@@ -908,7 +908,7 @@ void handleButtons() {
     userVol = (uint8_t)v;
     applyVolume(userVol);
     prefs.putUChar("volume", userVol);
-    volDisplayUntil = millis() + TIMER_CONFIRM_MS;
+    volDisplayStartMs = millis();
     Serial.printf("Vol: %d\n", userVol);
   }
 #endif
