@@ -33,6 +33,7 @@
 #include "sounds/Wifi_connected.h"
 #include "sounds/No_Wifi_update_skipped.h"
 #include "sounds/Looking_for_new_version.h"
+#include "sounds/Error_download_update.h"
 #include "sounds/No_new_version_to_download.h"
 
 // ── globals ─────────────────────────────────────────────────
@@ -155,6 +156,10 @@ void setup() {
 
   // PLAY_SOUND(Boot);
 
+  // ── NVS prefs (early init for OTA hash comparison) ────────
+  prefs.begin("sleep", false);
+  prefs.putString("fwHash", FW_HASH);
+
   // ── WiFi/OTA/download: only if PLAY button held at boot ───
   if (digitalRead(BTN_PLAY_STOP) == LOW) {
     Serial.println("PLAY held - entering update mode ...");
@@ -191,9 +196,7 @@ void setup() {
     errorHalt();
   }
 
-  // ── NVS prefs ────────────────────────────────────────────
-  prefs.begin("sleep", false);
-  prefs.putString("fwHash", FW_HASH);
+  // ── NVS prefs (continued) ─────────────────────────────────
 #if ENABLE_VOL_BUTTONS
   userVol        = prefs.getUChar("volume", VOL_DEFAULT);
 #else
@@ -369,7 +372,8 @@ void checkOTA() {
   }
 
   String localHash = prefs.getString("fwHash", "");
-  Serial.printf("OTA: local=%s  remote=%s\n", localHash.c_str(), remoteHash.c_str());
+  Serial.printf("OTA: local='%s' (%d bytes)  remote='%s' (%d bytes)\n",
+    localHash.c_str(), localHash.length(), remoteHash.c_str(), remoteHash.length());
   if (remoteHash == localHash) {
     Serial.println("OTA: up to date");
     PLAY_SOUND(No_new_version_to_download);
@@ -398,6 +402,7 @@ void checkOTA() {
   if (code != 200) {
     Serial.printf("OTA: firmware download failed (%d)\n", code);
     http2.end();
+    PLAY_SOUND(Error_download_update);
     return;
   }
 
@@ -405,12 +410,14 @@ void checkOTA() {
   if (contentLen <= 0) {
     Serial.println("OTA: unknown content length");
     http2.end();
+    PLAY_SOUND(Error_download_update);
     return;
   }
 
   if (!Update.begin(contentLen)) {
     Serial.println("OTA: not enough space");
     http2.end();
+    PLAY_SOUND(Error_download_update);
     return;
   }
 
@@ -421,6 +428,7 @@ void checkOTA() {
   if (written != (size_t)contentLen) {
     Serial.printf("OTA: wrote %u / %d\n", written, contentLen);
     Update.abort();
+    PLAY_SOUND(Error_download_update);
     return;
   }
 
@@ -428,8 +436,10 @@ void checkOTA() {
 
   if (!Update.end(true)) {
     Serial.println("OTA: finalize failed");
+    PLAY_SOUND(Error_download_update);
     return;
   }
+
 
   prefs.putString("fwHash", remoteHash);
   PLAY_SOUND(Update_installed);
@@ -449,6 +459,16 @@ void downloadAudioFiles() {
   for (int i = 1; ; i++) {
     String url = String(AUDIO_BASE_URL) + String(i) + ".mp3";
     snprintf(nameBuf, sizeof(nameBuf), "/audio%d.mp3", i);
+
+    // skip blacklist files
+    bool skip = false;
+    for (int p = 0; p < NO_DOWLOAD_FILE_COUNT; p++) {
+      if (strcmp(nameBuf + 1, NO_DOWLOAD[p]) == 0) { skip = true; break; }
+    }
+    if (skip) {
+      Serial.printf("  audio%d.mp3 -> on blacklist in config.h, skipping\n", i);
+      continue;
+    }
 
     HTTPClient http;
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);

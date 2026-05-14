@@ -54,6 +54,15 @@ const char* AUDIO_BASE_URL   = "https://telefabi.ch/sleep/static/audio/audio";
 // Audio files expected as audio1.mp3, audio2.mp3, ... on the server
 
 // ============================================================
+//  Protected audio files (never deleted/overwritten by downloads)
+// ============================================================
+const char* NO_DOWLOAD[] = {
+  "audio7.mp3",
+  "audio4.mp3"
+};
+const int NO_DOWLOAD_FILE_COUNT = sizeof(NO_DOWLOAD) / sizeof(NO_DOWLOAD[0]);
+
+// ============================================================
 //  Hardware config (pin assignments, supported formats, etc.)
 // ============================================================
 #include "hardware.h"
