@@ -53,12 +53,14 @@ struct {
 enum TimerState { TIMER_OFF, TIMER_SELECTING, TIMER_RUNNING };
 TimerState timerState       = TIMER_OFF;
 int  timerPresetIdx         = 0;
-unsigned long timerEndMs    = 0;
+unsigned long timerStartMs  = 0;
+unsigned long timerDurMs    = 0;
 unsigned long timerSelectMs = 0;
 bool timerFadeStarted       = false;
 
 // volume LED display
-unsigned long volDisplayUntil = 0;
+const unsigned long VOL_DISPLAY_MS = 2000;
+unsigned long volDisplayStartMs = -VOL_DISPLAY_MS;  // won't trigger on boot
 
 // button debounce
 unsigned long btnLastMs[BTN_COUNT] = {0};
@@ -195,7 +197,8 @@ void setup() {
     // auto-start timer if a preset was saved
     if (timerPresetIdx > 0) {
       int mins = TIMER_PRESETS[timerPresetIdx];
-      timerEndMs = millis() + (unsigned long)mins * 60000UL;
+      timerStartMs = millis();
+      timerDurMs = (unsigned long)mins * 60000UL;
       timerFadeStarted = false;
       timerState = TIMER_RUNNING;
       Serial.printf("Timer: auto-started %d min\n", mins);
@@ -654,7 +657,8 @@ void handleTimer() {
       Serial.println("Timer: off");
     } else if (isPlaying) {
       int mins = TIMER_PRESETS[timerPresetIdx];
-      timerEndMs = now + (unsigned long)mins * 60000UL;
+      timerStartMs = now;
+      timerDurMs = (unsigned long)mins * 60000UL;
       timerFadeStarted = false;
       timerState = TIMER_RUNNING;
       Serial.printf("Timer: started %d min\n", mins);
@@ -666,15 +670,15 @@ void handleTimer() {
 
   if (timerState != TIMER_RUNNING || !isPlaying) return;
 
-  unsigned long fadeStartAt = timerEndMs - FADE_SLEEP_MS;
-  if (!timerFadeStarted && now >= fadeStartAt) {
+  unsigned long elapsed = now - timerStartMs;
+  if (!timerFadeStarted && elapsed >= (timerDurMs - FADE_SLEEP_MS)) {
     Serial.println("Timer: starting 60s fade-out");
     beginFade(FADE_OUT_SLEEP, FADE_SLEEP_MS);
     timerFadeStarted = true;
   }
 
-  if (now >= timerEndMs) {
-    timerEndMs = 0;
+  if (elapsed >= timerDurMs) {
+    timerDurMs = 0;
     timerFadeStarted = false;
     timerPresetIdx = 0;
     timerState = TIMER_OFF;
@@ -690,7 +694,7 @@ void handleTimer() {
 // ============================================================
 void handleLEDs() {
   // volume display takes priority (temporary, after vol button press)
-  if (millis() < volDisplayUntil) {
+  if ((millis() - volDisplayStartMs) < VOL_DISPLAY_MS) {
     float pct = (float)(VOL_MIN - userVol) / (float)(VOL_MIN - VOL_MAX);
     int litIdx = (int)(pct * (LED_COUNT - 1) + 0.5f);
     litIdx = constrain(litIdx, 0, LED_COUNT - 1);
@@ -718,7 +722,7 @@ void handleLEDs() {
   }
 
   // TIMER_RUNNING: single LED indicates remaining fraction
-  if (timerEndMs == 0 || millis() >= timerEndMs) {
+  if (timerDurMs == 0 || (millis() - timerStartMs) >= timerDurMs) {
     for (int i = 0; i < LED_COUNT; i++) digitalWrite(LED_PINS[i], LOW);
     return;
   }
@@ -729,7 +733,8 @@ void handleLEDs() {
   int maxIdx = maxLit - 1;
 
   unsigned long totalMs  = (unsigned long)TIMER_PRESETS[timerPresetIdx] * 60000UL;
-  unsigned long remainMs = timerEndMs - millis();
+  unsigned long elapsedMs = millis() - timerStartMs;
+  unsigned long remainMs = (elapsedMs < timerDurMs) ? (timerDurMs - elapsedMs) : 0;
   int litIdx = (int)((float)remainMs / (float)totalMs * maxIdx + 0.5f);
   litIdx = constrain(litIdx, 0, maxIdx);
 
@@ -769,7 +774,8 @@ void handleButtons() {
       // restart timer if a preset is selected
       if (timerPresetIdx > 0) {
         int mins = TIMER_PRESETS[timerPresetIdx];
-        timerEndMs = millis() + (unsigned long)mins * 60000UL;
+        timerStartMs = millis();
+        timerDurMs = (unsigned long)mins * 60000UL;
         timerFadeStarted = false;
         timerState = TIMER_RUNNING;
         Serial.printf("Timer: restarted %d min\n", mins);
@@ -785,7 +791,8 @@ void handleButtons() {
       // auto-start timer if a preset is selected
       if (timerPresetIdx > 0) {
         int mins = TIMER_PRESETS[timerPresetIdx];
-        timerEndMs = millis() + (unsigned long)mins * 60000UL;
+        timerStartMs = millis();
+        timerDurMs = (unsigned long)mins * 60000UL;
         timerFadeStarted = false;
         timerState = TIMER_RUNNING;
         Serial.printf("Timer: auto-started %d min\n", mins);
@@ -819,7 +826,7 @@ void handleButtons() {
 
     // cancel any running timer/fade
     if (timerState == TIMER_RUNNING) {
-      timerEndMs = 0;
+      timerDurMs = 0;
       timerFadeStarted = false;
       if (fade.type == FADE_OUT_SLEEP) {
         fade.type = FADE_NONE;
@@ -839,7 +846,7 @@ void handleButtons() {
     userVol = (uint8_t)v;
     applyVolume(userVol);
     prefs.putUChar("volume", userVol);
-    volDisplayUntil = millis() + TIMER_CONFIRM_MS;
+    volDisplayStartMs = millis();
     Serial.printf("Vol: %d\n", userVol);
   }
 
