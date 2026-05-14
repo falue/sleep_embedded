@@ -182,6 +182,7 @@ void setup() {
 
   // ── NVS prefs ────────────────────────────────────────────
   prefs.begin("sleep", false);
+  prefs.putString("fwHash", FW_HASH);
 #if ENABLE_VOL_BUTTONS
   userVol        = prefs.getUChar("volume", VOL_DEFAULT);
 #else
@@ -306,6 +307,32 @@ void connectWiFi() {
 }
 
 // ============================================================
+//  Version comparison: returns 1 if a>b, -1 if a<b, 0 if equal.
+//  Parses dot-separated numeric versions (e.g. "1.2.3").
+//  Returns -99 if either string is not a valid version number.
+// ============================================================
+int compareVersions(const String& a, const String& b) {
+  int ai = 0, bi = 0;
+  while (ai < (int)a.length() || bi < (int)b.length()) {
+    int va = 0, vb = 0;
+    bool aHasDigit = false, bHasDigit = false;
+    while (ai < (int)a.length() && a[ai] != '.') {
+      if (a[ai] < '0' || a[ai] > '9') return -99;
+      va = va * 10 + (a[ai] - '0'); aHasDigit = true; ai++;
+    }
+    while (bi < (int)b.length() && b[bi] != '.') {
+      if (b[bi] < '0' || b[bi] > '9') return -99;
+      vb = vb * 10 + (b[bi] - '0'); bHasDigit = true; bi++;
+    }
+    if (!aHasDigit && !bHasDigit) break;
+    if (va > vb) return 1;
+    if (va < vb) return -1;
+    ai++; bi++;  // skip dot
+  }
+  return 0;
+}
+
+// ============================================================
 //  OTA - check hash, flash firmware if newer
 // ============================================================
 void checkOTA() {
@@ -335,6 +362,11 @@ void checkOTA() {
     Serial.println("OTA: up to date");
     return;
   }
+  // if both are valid version numbers, only update if remote is newer
+  int cmp = compareVersions(remoteHash, localHash);
+  if (cmp == 0) { Serial.println("OTA: same version"); return; }
+  if (cmp == -1) { Serial.println("OTA: server version is older, skipping"); return; }
+  // cmp == 1 (remote newer) or -99 (non-numeric, always update on difference)
 
   Serial.println("OTA: downloading firmware ...");
   PLAY_SOUND(Found_Update);
