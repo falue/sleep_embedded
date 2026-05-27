@@ -5,6 +5,8 @@
 ESP32-S3 + Adafruit VS1053 Codec/MicroSD breakout.
 Embedded version of [falue/sleep](https://github.com/falue/sleep).
 
+![embedded_sleep](README/embedded_sleep.jpg)
+
 ## Hardware
 
 | Component | Model |
@@ -15,6 +17,7 @@ Embedded version of [falue/sleep](https://github.com/falue/sleep).
 | LEDs | 10× LED bar (with current-limiting resistors) |
 
 ## Wiring
+![embedded_sleep](README/wiring.jpg)
 
 ### VS1053 breakout → ESP32-S3
 
